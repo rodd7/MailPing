@@ -9,6 +9,7 @@ from googleapiclient.errors import HttpError
 import base64
 import ast
 import json
+import re
 
 from email.message import EmailMessage
 from email.mime.text import MIMEText
@@ -62,6 +63,7 @@ def main():
       return
 
     output = []
+    unreadCount = 0
     for message in messages:
       msg = service.users().messages().get(userId='me', id=message['id']).execute()
       headers = msg['payload']['headers']
@@ -69,7 +71,7 @@ def main():
 
       for header in headers:
         if header['name'] == 'From':
-          outputMessage[0] = header['value']
+          outputMessage[0] = re.sub(r'[<>]', '', header['value'])
         if header['name'] == 'Subject':
           outputMessage[1] = header['value']
         if header['name'] == 'Date':
@@ -78,7 +80,7 @@ def main():
           outputMessage[3] = header['value']
 
       output.append(outputMessage)  
-      
+      unreadCount+=1
 
     with open('outputDiff.txt', 'r') as file:
         diffOutput = ast.literal_eval(file.read())
@@ -91,8 +93,9 @@ def main():
     
     print(exclusion)
 
+
     if exclusion:
-        sendMessage(service, 'rodd7170@gmail.com', 'rodd5901@gmail.com', 'Unchecked E-Mails', str(exclusion))
+        sendMessage(service, 'rodd7170@gmail.com', 'rodd5901@gmail.com', 'Unchecked E-Mails', str(exclusion), unreadCount)
 
         with open('outputDiff.txt', 'w') as filehandle:
             json.dump(output, filehandle)
@@ -104,46 +107,48 @@ def main():
     print(f"An error occurred: {error}")
 
 
-def sendMessage(service, messageFrom, messageTo, messageSubject, messageData):
+def sendMessage(service, messageFrom, messageTo, messageSubject, messageData, unreadCount):
     messageData = ast.literal_eval(messageData)
 
-    html_content = """
-    <html>
-    <head>
-        <style>
-        table {{
-            font-family: Arial, sans-serif;
-            border-collapse: collapse;
-            width: 100%;
-        }}
+    print("this is", messageData[0][0])
+    html_content = f"""
+        <html>
+        <head>
+            <style>
+            table {{
+                font-family: Arial, sans-serif;
+                border-collapse: collapse;
+                width: 100%;
+            }}
 
-        th, td {{
-            border: 1px solid #dddddd;
-            text-align: left;
-            padding: 8px;
-        }}
+            th, td {{
+                border: 1px solid #dddddd;
+                text-align: left;
+                padding: 8px;
+            }}
 
-        th {{
-            background-color: #f2f2f2;
-        }}
-        </style>
-    </head>
+            th {{
+                background-color: #f2f2f2;
+            }}
+            </style>
+        </head>
 
-    <body>
-        <h2>{}</h2>
-        <table>
-        <tr>
-            <th>From</th>
-            <th>Subject</th>
-            <th>Date</th>
-            <th>X-Mailer</th>
-        </tr>
-        {}
-        </table>
-    </body>
-    </html>
-    """.format(messageSubject, "".join("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(messageData[index][0], messageData[index][1], messageData[index][2], messageData[index][3]) for index, value in enumerate(messageData)))
-
+        <body>
+            <h2>{messageSubject}</h2>
+            <table>
+            <tr>
+                <th>From</th>
+                <th>Subject</th>
+                <th>Date</th>
+                <th>X-Mailer</th>
+            </tr>
+            {"".join(f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td></tr>" for row in messageData)}
+            </table>
+            <p>There are in total, {str(unreadCount)} unread E-Mails on your account</p>
+        </body>
+        </html>
+    """
+    
       
 
     toSend = MIMEText(html_content, "html")
