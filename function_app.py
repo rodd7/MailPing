@@ -1,4 +1,11 @@
+import logging
+import azure.functions as func
 import os.path
+
+import base64
+import ast
+import json
+import re
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -6,14 +13,24 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-import base64
-import ast
-import json
-import re
-
 from email.message import EmailMessage
 from email.mime.text import MIMEText
 from email import errors
+
+
+
+app = func.FunctionApp()
+
+@app.schedule(schedule="0 0 20 * * *", arg_name="myTimer", run_on_startup=True,
+              use_monitor=False) 
+def timer_trigger(myTimer: func.TimerRequest) -> None:
+    if myTimer.past_due:
+        logging.info('The timer is past due!')
+
+    main()
+
+    logging.info('Python timer trigger function executed.')
+
 
 
 # If modifying these scopes, delete the file token.json.
@@ -38,7 +55,7 @@ def main():
       )
       creds = flow.run_local_server(port=0)
     # Save the credentials for the next run
-    with open("/tmp/token.json", "w") as token:
+    with open("token.json", "w") as token:
       token.write(creds.to_json())
 
   try:
@@ -93,19 +110,18 @@ def main():
     
     print(exclusion)
 
-
     if exclusion:
         sendMessage(service, profileData['FromEmail'], profileData['ToEmail'], profileData['Subject'], str(exclusion), unreadCount)
         profile.close()
-        with open('/tmp/outputDiff.txt', 'w') as filehandle:
+        with open('outputDiff.txt', 'w') as filehandle:
             json.dump(output, filehandle)
+            return 200
     else:
        print("No new E-Mail")
 
   except HttpError as error:
     # TODO(developer) - Handle errors from gmail API.
     print(f"An error occurred: {error}")
-
 
 def sendMessage(service, messageFrom, messageTo, messageSubject, messageData, unreadCount):
     messageData = ast.literal_eval(messageData)
@@ -148,8 +164,6 @@ def sendMessage(service, messageFrom, messageTo, messageSubject, messageData, un
         </body>
         </html>
     """
-    
-      
 
     toSend = MIMEText(html_content, "html")
     toSend['to'] = messageTo
